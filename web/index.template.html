@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Relay — Renewal Radar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --paper: #f3efe4;
+      --ink: #1c241f;
+      --muted: #5d675f;
+      --line: #d8d1c2;
+      --navy: #1d3a42;
+      --signal: #c45c26;
+      --lapsed: #8f2d20;
+      --ok: #2f6b4f;
+      --card: #fbf8f1;
+      --chip: #eae4d6;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--paper); color: var(--ink); }
+    body {
+      font-family: "Public Sans", system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+    header {
+      background: var(--navy);
+      color: #f3efe4;
+      padding: 28px 32px 24px;
+    }
+    header .kicker {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      opacity: 0.7;
+    }
+    header h1 {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 650;
+      font-size: 34px;
+      margin: 6px 0 8px;
+      letter-spacing: -0.02em;
+    }
+    header p { margin: 0; max-width: 46rem; opacity: 0.88; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px 64px; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin: -18px 0 28px;
+    }
+    .stat {
+      background: var(--card);
+      border: 1px solid var(--line);
+      padding: 14px 16px 12px;
+    }
+    .stat b {
+      display: block;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 28px;
+      font-weight: 650;
+      letter-spacing: -0.03em;
+    }
+    .stat span { color: var(--muted); font-size: 12px; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+    .tab {
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--ink);
+      padding: 8px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .tab[aria-selected="true"] {
+      background: var(--navy);
+      color: #f3efe4;
+      border-color: var(--navy);
+    }
+    select, input[type="search"] {
+      font: inherit;
+      border: 1px solid var(--line);
+      background: var(--card);
+      padding: 8px 10px;
+      color: var(--ink);
+    }
+    input[type="search"] { min-width: 180px; margin-left: auto; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      padding: 16px 18px 14px;
+      margin-bottom: 10px;
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 16px;
+    }
+    .days {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 36px;
+      font-weight: 650;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      color: var(--signal);
+    }
+    .days small {
+      display: block;
+      font-family: "Public Sans", sans-serif;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 4px;
+      font-weight: 500;
+    }
+    .card.lapsed .days { color: var(--lapsed); }
+    .card.later .days { color: var(--ok); }
+    .name {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 22px;
+      font-weight: 650;
+      margin: 0 0 4px;
+    }
+    .meta { color: var(--muted); font-size: 13px; }
+    .chips { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      background: var(--chip);
+      font-size: 11px;
+      padding: 3px 8px;
+      letter-spacing: 0.02em;
+    }
+    .chip.warn { background: #f3d9c8; color: #7a3514; }
+    .chip.bad { background: #f0d4cf; color: var(--lapsed); }
+    .chip.ok { background: #d7e6dc; color: var(--ok); }
+    .scope { margin: 8px 0 0; }
+    .empty { color: var(--muted); padding: 32px 8px; }
+    .problems {
+      margin-top: 36px;
+      border-top: 1px solid var(--line);
+      padding-top: 24px;
+    }
+    .problems h2 {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 22px;
+      margin: 0 0 8px;
+    }
+    .problems dl {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 8px 16px;
+      margin: 16px 0 0;
+    }
+    .problems dt { font-weight: 600; }
+    .problems dd { margin: 0; color: var(--muted); }
+    footer {
+      margin-top: 40px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    @media (max-width: 800px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .card { grid-template-columns: 1fr; }
+      input[type="search"] { margin-left: 0; width: 100%; }
+      .wrap, header { padding-left: 18px; padding-right: 18px; }
+      .problems dl { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="kicker">Relay · Harbourline</div>
+    <h1>Renewal Radar</h1>
+    <p>
+      Retainers coming up in the next <strong id="window-days">45</strong> days.
+      Built for an account lead — no terminal, no new logins.
+      As of <strong id="as-of-label"></strong>.
+    </p>
+  </header>
+
+  <div class="wrap">
+    <div class="stats" id="stats"></div>
+
+    <div class="toolbar">
+      <button class="tab" data-view="upcoming" aria-selected="true">Next 45 days</button>
+      <button class="tab" data-view="lapsed">Already lapsed</button>
+      <button class="tab" data-view="later">Later</button>
+      <button class="tab" data-view="review">Needs a look</button>
+      <select id="lead-filter" aria-label="Filter by account lead">
+        <option value="">All account leads</option>
+      </select>
+      <input type="search" id="search" placeholder="Search a brand" />
+    </div>
+
+    <div id="list"></div>
+
+    <section class="problems">
+      <h2>What this build does with the messy data</h2>
+      <p>The two exports share no client ID. The radar still has to be usable.</p>
+      <dl id="problems"></dl>
+    </section>
+
+    <footer>
+      Sample billing + project exports shipped in <code>/data</code>.
+      Re-run with <code>python -m radar.build</code>.
+      Proposed as a Relay screen — not a sidecar spreadsheet.
+    </footer>
+  </div>
+
+  <script>
+    const RADAR = /*__RADAR_JSON__*/;
+
+    const money = (n) =>
+      new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      }).format(n);
+
+    const niceDate = (iso) => {
+      if (!iso) return "—";
+      const [y, m, d] = iso.split("-").map(Number);
+      return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+    };
+
+    document.getElementById("as-of-label").textContent = niceDate(RADAR.as_of);
+    document.getElementById("window-days").textContent = RADAR.window_days;
+
+    const leads = [...new Set(
+      [...RADAR.upcoming, ...RADAR.lapsed, ...RADAR.later]
+        .map((r) => r.account_lead)
+        .filter(Boolean)
+    )].sort();
+    const leadSel = document.getElementById("lead-filter");
+    leads.forEach((l) => {
+      const o = document.createElement("option");
+      o.value = l;
+      o.textContent = l;
+      leadSel.appendChild(o);
+    });
+
+    const mrr = RADAR.upcoming.reduce((s, r) => s + r.monthly_retainer_usd, 0);
+    document.getElementById("stats").innerHTML = `
+      <div class="stat"><b>${RADAR.upcoming.length}</b><span>up for renewal by ${niceDate(RADAR.window_end)}</span></div>
+      <div class="stat"><b>${money(mrr)}</b><span>monthly retainers in that window</span></div>
+      <div class="stat"><b>${RADAR.lapsed.length}</b><span>already lapsed — the failure mode from last quarter</span></div>
+      <div class="stat"><b>${RADAR.unmatched_billing.length + RADAR.unmatched_projects.length + RADAR.needs_review.length}</b><span>rows that still need a human look</span></div>
+    `;
+
+    const problems = document.getElementById("problems");
+    const mismatchBits = RADAR.records
+      .filter((r) => r.project_name && r.billing_name !== r.project_name)
+      .map((r) => `${r.billing_name} → ${r.project_name} (${r.match_score})`);
+    problems.innerHTML = `
+      <dt>No shared client ID</dt>
+      <dd>Names are normalised (case, punctuation, Inc/LLC/Ltd/Co, leading The, &amp; vs and, split compounds like Northstar / North Star). ${mismatchBits.length} pairs matched across spelling. Unmatched stay visible: billing <em>${RADAR.unmatched_billing.join(", ") || "none"}</em>; project <em>${RADAR.unmatched_projects.join(", ") || "none"}</em>.</dd>
+      <dt>Missing end dates</dt>
+      <dd>Inferred as start + 3 calendar months and flagged so a lead can confirm. ${RADAR.missing_end_dates.map((n) => `<em>${n}</em>`).join(", ") || "None in this export"}.</dd>
+      <dt>Re-signs (duplicate rows)</dt>
+      <dd>Same normalised name, latest start wins; older terms are kept as history, not as a second radar card. ${RADAR.superseded.map((s) => `${s.client_name} (${niceDate(s.start)}–${niceDate(s.end)})`).join("; ") || "None"}.</dd>
+      <dt>No new logins / paid APIs</dt>
+      <dd>This page is static. Matching is stdlib sequence matching, not a paid service. Drop the two CSVs in the repo; rebuild if you want a new snapshot.</dd>
+    `;
+
+    function chips(r) {
+      const out = [];
+      if (r.end_inferred) out.push(`<span class="chip warn">end date inferred</span>`);
+      if (r.prior_terms && r.prior_terms.length) out.push(`<span class="chip">re-signed · prior term ended ${niceDate(r.prior_terms[0].end)}</span>`);
+      if (r.match_kind === "unmatched") out.push(`<span class="chip bad">no project match</span>`);
+      else if (r.match_score && r.match_score < 100) out.push(`<span class="chip">matched ${r.match_score} · ${r.match_why}</span>`);
+      else if (r.match_score === 100) out.push(`<span class="chip ok">name match after normalise</span>`);
+      if (r.health === "at_risk" || r.health === "quiet") out.push(`<span class="chip bad">${r.health}</span>`);
+      return out.join("");
+    }
+
+    function card(r, view) {
+      const cls = view === "lapsed" ? "lapsed" : view === "later" ? "later" : "";
+      const daysLabel =
+        r.days === null ? "—" :
+        r.days < 0 ? `${Math.abs(r.days)}` :
+        `${r.days}`;
+      const unit =
+        r.days === null ? "no date" :
+        r.days < 0 ? "days ago" :
+        r.days === 0 ? "today" :
+        "days";
+      return `
+        <article class="card ${cls}">
+          <div>
+            <div class="days">${daysLabel}<small>${unit}</small></div>
+          </div>
+          <div>
+            <h3 class="name">${r.display_name}</h3>
+            <div class="meta">
+              ${r.package || "Retainer"} · ${money(r.monthly_retainer_usd)}/mo
+              · ${r.account_lead || "unassigned"}
+              · renews ${niceDate(r.end)}
+            </div>
+            <div class="chips">${chips(r)}</div>
+            ${r.scope ? `<p class="scope">${r.scope}${r.last_delivery ? ` · last delivery ${niceDate(r.last_delivery)}` : ""}</p>` : ""}
+            ${r.notes ? `<p class="meta">${r.notes}</p>` : ""}
+          </div>
+        </article>`;
+    }
+
+    function reviewBlock() {
+      const rows = [];
+      RADAR.needs_review.forEach((x) => {
+        rows.push(`<article class="card"><div></div><div>
+          <h3 class="name">${x.billing_name}</h3>
+          <p class="meta">Possible match to <strong>${x.project_name}</strong> · score ${x.score}. ${x.why}. Confirm before treating as the same client.</p>
+        </div></article>`);
+      });
+      RADAR.unmatched_billing.forEach((n) => {
+        rows.push(`<article class="card"><div></div><div>
+          <h3 class="name">${n}</h3>
+          <p class="meta">In billing, not in the project export. Renewal date still shows on the 45-day list; scope is blank.</p>
+        </div></article>`);
+      });
+      RADAR.unmatched_projects.forEach((n) => {
+        rows.push(`<article class="card"><div></div><div>
+          <h3 class="name">${n}</h3>
+          <p class="meta">In the project export, not in billing. Could be a brand that signed and never made it onto the invoice file — last quarter’s failure mode in reverse.</p>
+        </div></article>`);
+      });
+      return rows.join("") || `<p class="empty">Nothing sitting in review.</p>`;
+    }
+
+    let view = "upcoming";
+
+    function render() {
+      const q = document.getElementById("search").value.trim().toLowerCase();
+      const lead = leadSel.value;
+      const list = document.getElementById("list");
+      if (view === "review") {
+        list.innerHTML = reviewBlock();
+        return;
+      }
+      let rows = RADAR[view] || [];
+      if (lead) rows = rows.filter((r) => r.account_lead === lead);
+      if (q) {
+        rows = rows.filter((r) =>
+          [r.display_name, r.billing_name, r.project_name, r.account_lead]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(q)
+        );
+      }
+      if (!rows.length) {
+        list.innerHTML = `<p class="empty">Nothing in this view.</p>`;
+        return;
+      }
+      list.innerHTML = rows.map((r) => card(r, view)).join("");
+    }
+
+    document.querySelectorAll(".tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        view = btn.dataset.view;
+        document.querySelectorAll(".tab").forEach((b) =>
+          b.setAttribute("aria-selected", b === btn ? "true" : "false")
+        );
+        render();
+      });
+    });
+    leadSel.addEventListener("change", render);
+    document.getElementById("search").addEventListener("input", render);
+    render();
+  </script>
+</body>
+</html>
