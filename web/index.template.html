@@ -47,11 +47,53 @@
     }
     header p { margin: 0; max-width: 46rem; opacity: 0.88; }
     .wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px 64px; }
+    .load {
+      background: var(--card);
+      border: 1px solid var(--line);
+      padding: 16px 18px;
+      margin: -18px 0 20px;
+      display: grid;
+      gap: 12px;
+    }
+    .load-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: end;
+    }
+    .load label {
+      font-size: 12px;
+      color: var(--muted);
+      display: grid;
+      gap: 4px;
+    }
+    .load input[type="file"],
+    .load input[type="date"] {
+      font: inherit;
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 8px 10px;
+      color: var(--ink);
+    }
+    .load button {
+      font: inherit;
+      border: 0;
+      background: var(--navy);
+      color: #f3efe4;
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+    .load button.secondary {
+      background: transparent;
+      color: var(--navy);
+      border: 1px solid var(--navy);
+    }
+    .source { font-size: 12px; color: var(--muted); margin: 0; }
     .stats {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 12px;
-      margin: -18px 0 28px;
+      margin: 0 0 28px;
     }
     .stat {
       background: var(--card);
@@ -141,6 +183,13 @@
     .chip.bad { background: #f0d4cf; color: var(--lapsed); }
     .chip.ok { background: #d7e6dc; color: var(--ok); }
     .scope { margin: 8px 0 0; }
+    .possible {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px dashed #c45c26;
+      background: #fbf3ec;
+    }
+    .possible strong { display: block; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: #7a3514; margin-bottom: 4px; }
     .empty { color: var(--muted); padding: 32px 8px; }
     .problems {
       margin-top: 36px;
@@ -179,13 +228,29 @@
     <div class="kicker">Relay · Harbourline</div>
     <h1>Renewal Radar</h1>
     <p>
-      Retainers coming up in the next <strong id="window-days">45</strong> days.
-      Built for an account lead — no terminal, no new logins.
-      As of <strong id="as-of-label"></strong>.
+      Pull both exports, see retainers in the next 45 days.
+      No terminal — load the files Relay already has, or drop in Nadia’s latest CSVs.
     </p>
   </header>
 
   <div class="wrap">
+    <section class="load" aria-label="Load exports">
+      <div class="load-row">
+        <button type="button" id="btn-load" class="secondary">Load latest exports</button>
+        <label>Billing export
+          <input type="file" id="file-billing" accept=".csv,text/csv" />
+        </label>
+        <label>Project export
+          <input type="file" id="file-project" accept=".csv,text/csv" />
+        </label>
+        <label>As of
+          <input type="date" id="as-of" value="2026-08-29" />
+        </label>
+        <button type="button" id="btn-run">Show radar</button>
+      </div>
+      <p class="source" id="source">Processing the two sample exports shipped with Relay…</p>
+    </section>
+
     <div class="stats" id="stats"></div>
 
     <div class="toolbar">
@@ -208,15 +273,17 @@
     </section>
 
     <footer>
-      Sample billing + project exports shipped in <code>/data</code>.
-      Re-run with <code>python -m radar.build</code>.
-      Proposed as a Relay screen — not a sidecar spreadsheet.
+      Matching runs in this page from the CSVs — not from a pre-built snapshot.
+      Sample files live in <code>data/</code>. Next month: Load latest, or upload Nadia’s new exports.
     </footer>
   </div>
 
   <script>
-    const RADAR = /*__RADAR_JSON__*/;
-
+    const SAMPLE_BILLING = /*__SAMPLE_BILLING__*/;
+    const SAMPLE_PROJECT = /*__SAMPLE_PROJECT__*/;
+  </script>
+  <script src="radar.js"></script>
+  <script>
     const money = (n) =>
       new Intl.NumberFormat("en-US", {
         style: "currency",
@@ -235,58 +302,128 @@
       });
     };
 
-    document.getElementById("as-of-label").textContent = niceDate(RADAR.as_of);
-    document.getElementById("window-days").textContent = RADAR.window_days;
+    let RADAR = null;
+    let view = "upcoming";
+    let uploadedBilling = null;
+    let uploadedProject = null;
+    let lastBilling = null;
+    let lastProject = null;
+    let sourceLabel = "";
 
-    const leads = [...new Set(
-      [...RADAR.upcoming, ...RADAR.lapsed, ...RADAR.later]
-        .map((r) => r.account_lead)
-        .filter(Boolean)
-    )].sort();
+    const sourceEl = document.getElementById("source");
+    const asOfEl = document.getElementById("as-of");
     const leadSel = document.getElementById("lead-filter");
-    leads.forEach((l) => {
-      const o = document.createElement("option");
-      o.value = l;
-      o.textContent = l;
-      leadSel.appendChild(o);
-    });
 
-    const mrr = RADAR.upcoming.reduce((s, r) => s + r.monthly_retainer_usd, 0);
-    document.getElementById("stats").innerHTML = `
-      <div class="stat"><b>${RADAR.upcoming.length}</b><span>up for renewal by ${niceDate(RADAR.window_end)}</span></div>
-      <div class="stat"><b>${money(mrr)}</b><span>monthly retainers in that window</span></div>
-      <div class="stat"><b>${RADAR.lapsed.length}</b><span>already lapsed — the failure mode from last quarter</span></div>
-      <div class="stat"><b>${RADAR.unmatched_billing.length + RADAR.unmatched_projects.length + RADAR.needs_review.length}</b><span>rows that still need a human look</span></div>
-    `;
+    function setSource(text) {
+      sourceLabel = text;
+      sourceEl.textContent = text;
+    }
 
-    const problems = document.getElementById("problems");
-    const mismatchBits = RADAR.records
-      .filter((r) => r.project_name && r.billing_name !== r.project_name)
-      .map((r) => `${r.billing_name} → ${r.project_name} (${r.match_score})`);
-    problems.innerHTML = `
-      <dt>No shared client ID</dt>
-      <dd>Names are normalised (case, punctuation, Inc/LLC/Ltd/Co, leading The, &amp; vs and, split compounds like Northstar / North Star). ${mismatchBits.length} pairs matched across spelling. Unmatched stay visible: billing <em>${RADAR.unmatched_billing.join(", ") || "none"}</em>; project <em>${RADAR.unmatched_projects.join(", ") || "none"}</em>.</dd>
-      <dt>Missing end dates</dt>
-      <dd>Inferred as start + 3 calendar months and flagged so a lead can confirm. ${RADAR.missing_end_dates.map((n) => `<em>${n}</em>`).join(", ") || "None in this export"}.</dd>
-      <dt>Re-signs (duplicate rows)</dt>
-      <dd>Same normalised name, latest start wins; older terms are kept as history, not as a second radar card. ${RADAR.superseded.map((s) => `${s.client_name} (${niceDate(s.start)}–${niceDate(s.end)})`).join("; ") || "None"}.</dd>
-      <dt>No new logins / paid APIs</dt>
-      <dd>This page is static. Matching is stdlib sequence matching, not a paid service. Drop the two CSVs in the repo; rebuild if you want a new snapshot.</dd>
-    `;
+    function process(billingText, projectText, label) {
+      const billing = RelayRadar.loadBilling(RelayRadar.parseCsv(billingText));
+      const projects = RelayRadar.loadProjects(RelayRadar.parseCsv(projectText));
+      if (!billing.length || !projects.length) {
+        setSource("Those files did not look like the billing / project exports. Check the headers.");
+        return;
+      }
+      RADAR = RelayRadar.runRadar(billing, projects, asOfEl.value || "2026-08-29");
+      lastBilling = billingText;
+      lastProject = projectText;
+      setSource(label);
+      paint();
+    }
+
+    async function loadLatest() {
+      try {
+        const [b, p] = await Promise.all([
+          fetch("data/billing_export.csv").then((r) => {
+            if (!r.ok) throw new Error(r.status);
+            return r.text();
+          }),
+          fetch("data/project_export.csv").then((r) => {
+            if (!r.ok) throw new Error(r.status);
+            return r.text();
+          }),
+        ]);
+        process(b, p, "Loaded latest exports from data/ (billing_export.csv + project_export.csv).");
+      } catch (err) {
+        process(
+          SAMPLE_BILLING,
+          SAMPLE_PROJECT,
+          "Could not fetch data/ over the network — using the sample exports bundled in this page. Upload new CSVs when Nadia sends them."
+        );
+      }
+    }
+
+    function paint() {
+      if (!RADAR) return;
+      const mrr = RADAR.upcoming.reduce((s, r) => s + r.monthly_retainer_usd, 0);
+      const reviewN =
+        RADAR.unmatched_billing.length +
+        RADAR.unmatched_projects.length +
+        RADAR.needs_review.length;
+      document.getElementById("stats").innerHTML = `
+        <div class="stat"><b>${RADAR.upcoming.length}</b><span>up for renewal by ${niceDate(RADAR.window_end)}</span></div>
+        <div class="stat"><b>${money(mrr)}</b><span>monthly retainers in that window</span></div>
+        <div class="stat"><b>${RADAR.lapsed.length}</b><span>already lapsed — the failure mode from last quarter</span></div>
+        <div class="stat"><b>${reviewN}</b><span>rows that still need a human look</span></div>
+      `;
+
+      const currentLead = leadSel.value;
+      leadSel.innerHTML = `<option value="">All account leads</option>`;
+      const leads = [...new Set(
+        [...RADAR.upcoming, ...RADAR.lapsed, ...RADAR.later]
+          .map((r) => r.account_lead)
+          .filter(Boolean)
+      )].sort();
+      leads.forEach((l) => {
+        const o = document.createElement("option");
+        o.value = l;
+        o.textContent = l;
+        leadSel.appendChild(o);
+      });
+      if (currentLead && leads.includes(currentLead)) leadSel.value = currentLead;
+
+      const mismatchBits = RADAR.records
+        .filter((r) => r.match_kind === "matched" && r.project_name && r.billing_name !== r.project_name)
+        .map((r) => `${r.billing_name} → ${r.project_name}`);
+      document.getElementById("problems").innerHTML = `
+        <dt>No shared client ID</dt>
+        <dd>Names are normalised (case, punctuation, Inc/LLC/Ltd/Co, leading The, &amp; vs and). Confirmed only when they are the same after that. Fuzzy hits are <em>possible matches</em>, not the same client. Confirmed this run: ${mismatchBits.join("; ") || "none beyond identical names"}. Unmatched: billing <em>${RADAR.unmatched_billing.join(", ") || "none"}</em>; project <em>${RADAR.unmatched_projects.join(", ") || "none"}</em>.</dd>
+        <dt>Missing end dates</dt>
+        <dd>Estimated as start + 3 calendar months and labelled <em>Estimated renewal — verify</em>. ${RADAR.missing_end_dates.map((n) => `<em>${n}</em>`).join(", ") || "None in this export"}.</dd>
+        <dt>Re-signs (duplicate rows)</dt>
+        <dd>Same normalised name, latest start wins; older terms are history, not a second card. ${RADAR.superseded.map((s) => `${s.client_name} (${niceDate(s.start)}–${niceDate(s.end)})`).join("; ") || "None"}.</dd>
+        <dt>New export next month</dt>
+        <dd>Load latest exports (reads <code>data/</code>) or upload Nadia’s two CSVs and click Show radar. Matching happens in this page.</dd>
+      `;
+      renderList();
+    }
 
     function chips(r) {
       const out = [];
-      if (r.end_inferred) out.push(`<span class="chip warn">end date inferred</span>`);
+      if (r.end_inferred) out.push(`<span class="chip warn">Estimated renewal — verify</span>`);
       if (r.prior_terms && r.prior_terms.length) out.push(`<span class="chip">re-signed · prior term ended ${niceDate(r.prior_terms[0].end)}</span>`);
       if (r.match_kind === "unmatched") out.push(`<span class="chip bad">no project match</span>`);
-      else if (r.match_score && r.match_score < 100) out.push(`<span class="chip">matched ${r.match_score} · ${r.match_why}</span>`);
-      else if (r.match_score === 100) out.push(`<span class="chip ok">name match after normalise</span>`);
+      if (r.match_kind === "matched") out.push(`<span class="chip ok">confirmed name match</span>`);
+      if (r.match_kind === "review") out.push(`<span class="chip warn">Possible match — confirm</span>`);
       if (r.health === "at_risk" || r.health === "quiet") out.push(`<span class="chip bad">${r.health}</span>`);
       return out.join("");
     }
 
-    function card(r, view) {
-      const cls = view === "lapsed" ? "lapsed" : view === "later" ? "later" : "";
+    function possibleBox(r) {
+      const p = r.possible_match;
+      if (!p) return "";
+      return `<div class="possible">
+        <strong>Possible project match — confirm</strong>
+        ${p.project_name} · confidence ${p.score}
+        <div class="meta">${p.why}</div>
+        ${p.scope ? `<div class="meta">If this is the same brand: ${p.scope}${p.last_delivery ? ` · last delivery ${niceDate(p.last_delivery)}` : ""}</div>` : ""}
+      </div>`;
+    }
+
+    function card(r, which) {
+      const cls = which === "lapsed" ? "lapsed" : which === "later" ? "later" : "";
       const daysLabel =
         r.days === null ? "—" :
         r.days < 0 ? `${Math.abs(r.days)}` :
@@ -296,6 +433,7 @@
         r.days < 0 ? "days ago" :
         r.days === 0 ? "today" :
         "days";
+      const renewLabel = r.end_inferred ? "estimated renewal" : "renews";
       return `
         <article class="card ${cls}">
           <div>
@@ -306,11 +444,12 @@
             <div class="meta">
               ${r.package || "Retainer"} · ${money(r.monthly_retainer_usd)}/mo
               · ${r.account_lead || "unassigned"}
-              · renews ${niceDate(r.end)}
+              · ${renewLabel} ${niceDate(r.end)}
             </div>
             <div class="chips">${chips(r)}</div>
             ${r.scope ? `<p class="scope">${r.scope}${r.last_delivery ? ` · last delivery ${niceDate(r.last_delivery)}` : ""}</p>` : ""}
-            ${r.notes ? `<p class="meta">${r.notes}</p>` : ""}
+            ${r.notes && r.match_kind === "matched" ? `<p class="meta">${r.notes}</p>` : ""}
+            ${possibleBox(r)}
           </div>
         </article>`;
     }
@@ -320,7 +459,11 @@
       RADAR.needs_review.forEach((x) => {
         rows.push(`<article class="card"><div></div><div>
           <h3 class="name">${x.billing_name}</h3>
-          <p class="meta">Possible match to <strong>${x.project_name}</strong> · score ${x.score}. ${x.why}. Confirm before treating as the same client.</p>
+          <div class="possible">
+            <strong>Possible project match — confirm</strong>
+            ${x.project_name} · confidence ${x.score}
+            <div class="meta">${x.why}. Not treated as the same client until a lead confirms.</div>
+          </div>
         </div></article>`);
       });
       RADAR.unmatched_billing.forEach((n) => {
@@ -332,15 +475,13 @@
       RADAR.unmatched_projects.forEach((n) => {
         rows.push(`<article class="card"><div></div><div>
           <h3 class="name">${n}</h3>
-          <p class="meta">In the project export, not in billing. Could be a brand that signed and never made it onto the invoice file — last quarter’s failure mode in reverse.</p>
+          <p class="meta">In the project export, not in billing. Could be a brand that signed and never made it onto the invoice file.</p>
         </div></article>`);
       });
       return rows.join("") || `<p class="empty">Nothing sitting in review.</p>`;
     }
 
-    let view = "upcoming";
-
-    function render() {
+    function renderList() {
       const q = document.getElementById("search").value.trim().toLowerCase();
       const lead = leadSel.value;
       const list = document.getElementById("list");
@@ -352,7 +493,7 @@
       if (lead) rows = rows.filter((r) => r.account_lead === lead);
       if (q) {
         rows = rows.filter((r) =>
-          [r.display_name, r.billing_name, r.project_name, r.account_lead]
+          [r.display_name, r.billing_name, r.project_name, r.account_lead, r.possible_match && r.possible_match.project_name]
             .filter(Boolean)
             .join(" ")
             .toLowerCase()
@@ -372,12 +513,38 @@
         document.querySelectorAll(".tab").forEach((b) =>
           b.setAttribute("aria-selected", b === btn ? "true" : "false")
         );
-        render();
+        renderList();
       });
     });
-    leadSel.addEventListener("change", render);
-    document.getElementById("search").addEventListener("input", render);
-    render();
+    leadSel.addEventListener("change", renderList);
+    document.getElementById("search").addEventListener("input", renderList);
+
+    document.getElementById("file-billing").addEventListener("change", (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      f.text().then((t) => { uploadedBilling = t; setSource(`Billing file ready: ${f.name}. Add the project export and click Show radar.`); });
+    });
+    document.getElementById("file-project").addEventListener("change", (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      f.text().then((t) => { uploadedProject = t; setSource(`Project file ready: ${f.name}. Add the billing export if needed, then Show radar.`); });
+    });
+    document.getElementById("btn-run").addEventListener("click", () => {
+      const b = uploadedBilling || lastBilling || SAMPLE_BILLING;
+      const p = uploadedProject || lastProject || SAMPLE_PROJECT;
+      const who = uploadedBilling || uploadedProject
+        ? "Processed the uploaded export(s)."
+        : (lastBilling ? sourceLabel : "Processed the sample exports bundled in this page.");
+      process(b, p, who);
+    });
+    document.getElementById("btn-load").addEventListener("click", loadLatest);
+    asOfEl.addEventListener("change", () => {
+      const b = lastBilling || SAMPLE_BILLING;
+      const p = lastProject || SAMPLE_PROJECT;
+      process(b, p, sourceLabel || "Re-ran with the new as-of date.");
+    });
+
+    loadLatest();
   </script>
 </body>
 </html>

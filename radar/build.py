@@ -1,39 +1,34 @@
-"""Build a self-contained HTML file an account lead can open."""
+"""Copy the runtime app into docs/ — matching happens in the browser."""
 
 from __future__ import annotations
 
 import json
-from datetime import date
+import shutil
 from pathlib import Path
 
-from radar.io import load_billing, load_projects
-from radar.pipeline import run_radar
-
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_AS_OF = date(2026, 8, 29)
 
 
-def build(as_of: date = DEFAULT_AS_OF) -> Path:
-    billing = load_billing(ROOT / "data" / "billing_export.csv")
-    projects = load_projects(ROOT / "data" / "project_export.csv")
-    payload = run_radar(billing, projects, as_of)
-
+def build() -> Path:
     docs = ROOT / "docs"
+    data_out = docs / "data"
     docs.mkdir(exist_ok=True)
-    (docs / "radar.json").write_text(
-        json.dumps(payload, indent=2), encoding="utf-8"
-    )
+    data_out.mkdir(exist_ok=True)
 
-    template = (ROOT / "web" / "index.template.html").read_text(encoding="utf-8")
-    html = template.replace(
-        "/*__RADAR_JSON__*/",
-        json.dumps(payload, ensure_ascii=False),
-    )
+    billing = (ROOT / "data" / "billing_export.csv").read_text(encoding="utf-8")
+    project = (ROOT / "data" / "project_export.csv").read_text(encoding="utf-8")
+    (data_out / "billing_export.csv").write_text(billing, encoding="utf-8")
+    (data_out / "project_export.csv").write_text(project, encoding="utf-8")
+
+    shutil.copyfile(ROOT / "web" / "radar.js", docs / "radar.js")
+
+    html = (ROOT / "web" / "index.template.html").read_text(encoding="utf-8")
+    html = html.replace("/*__SAMPLE_BILLING__*/", json.dumps(billing))
+    html = html.replace("/*__SAMPLE_PROJECT__*/", json.dumps(project))
     out = docs / "index.html"
     out.write_text(html, encoding="utf-8")
     return out
 
 
 if __name__ == "__main__":
-    path = build()
-    print(path)
+    print(build())

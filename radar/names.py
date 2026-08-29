@@ -65,9 +65,8 @@ def name_score(left: str, right: str) -> tuple[int, str]:
     """Return (0-100, why).
 
     Compact-equal is scored just under exact-normalized so Glow Theory /
-    GlowTheory auto-matches, but a reviewer can still see it was not
-    identical after suffix-stripping. Alternative: treat compact-equal as
-    100 — that hides the spelling mess from the account lead.
+    GlowTheory still *finds* each other, but is not treated as confirmed.
+    Alternative: treat compact-equal as 100 — that hides the spelling mess.
     """
     na, nb = normalize_name(left), normalize_name(right)
     if not na or not nb:
@@ -94,15 +93,16 @@ def name_score(left: str, right: str) -> tuple[int, str]:
     return score, "fuzzy (sequence / token-sort / compact)"
 
 
-# Auto-match vs review vs unmatched. 88 is high enough that "Lumen Oral"
-# / "Lumen Oral Care" (90, prefix) still joins, and low enough that a
-# stray 70-something never silently binds two different brands.
-AUTO_MATCH = 88
+# Confirmed means the names are the same after the normaliser — not "pretty
+# close". 72–99 is a possible match the lead must confirm. Alternative:
+# auto-attach at 88. That is how a 90% Mira Skin / Mira Skin Care pair
+# silently becomes one client.
+CONFIRMED = 100
 REVIEW_FLOOR = 72
 
 
 def classify_score(score: int) -> str:
-    if score >= AUTO_MATCH:
+    if score >= CONFIRMED:
         return "matched"
     if score >= REVIEW_FLOOR:
         return "review"

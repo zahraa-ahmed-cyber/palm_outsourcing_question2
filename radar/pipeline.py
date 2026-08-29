@@ -76,12 +76,19 @@ def collapse_resigns(billing: list[dict]) -> tuple[list[dict], list[dict]]:
 
 def pair_projects(
     current: list[dict], projects: list[dict]
-) -> tuple[dict[int, tuple[int, int, str]], list[dict], list[str], list[str]]:
-    """Greedy one-to-one match, highest score first.
+) -> tuple[
+    dict[int, tuple[int, int, str]],
+    dict[int, tuple[int, int, str]],
+    list[dict],
+    list[str],
+    list[str],
+]:
+    """Greedy one-to-one. Confirmed (100) and possible (72–99) are separate.
 
-    Alternative: every billing row independently takes its best project
-    row. Then two legal-name variants steal the same project record.
-    We already collapsed re-signs, so unique-match is the honest model.
+    A possible match reserves both rows so they cannot also bind to someone
+    else, but it is not treated as the same client. Alternative: attach the
+    project anyway so scope sits on the card. That tells the lead the
+    relationship is confirmed when it is not.
     """
     scored: list[tuple[int, int, int, str]] = []
     for bi, b in enumerate(current):
@@ -93,6 +100,7 @@ def pair_projects(
     used_b: set[int] = set()
     used_p: set[int] = set()
     attached: dict[int, tuple[int, int, str]] = {}
+    possible: dict[int, tuple[int, int, str]] = {}
     reviews: list[dict] = []
 
     for score, bi, pi, why in scored:
@@ -101,7 +109,10 @@ def pair_projects(
             continue
         if bi in used_b or pi in used_p:
             continue
+        used_b.add(bi)
+        used_p.add(pi)
         if kind == "review":
+            possible[bi] = (pi, score, why)
             reviews.append(
                 {
                     "billing_name": current[bi]["client_name"],
@@ -110,20 +121,12 @@ def pair_projects(
                     "why": why,
                 }
             )
-            # Still attach so the lead sees scope next to the date —
-            # but the row is flagged. Alternative: leave unmatched until
-            # a human confirms. That hides the renewal.
-            used_b.add(bi)
-            used_p.add(pi)
-            attached[bi] = (pi, score, why)
             continue
-        used_b.add(bi)
-        used_p.add(pi)
         attached[bi] = (pi, score, why)
 
     unmatched_billing = [current[i]["client_name"] for i in range(len(current)) if i not in used_b]
     unmatched_projects = [projects[i]["brand_name"] for i in range(len(projects)) if i not in used_p]
-    return attached, reviews, unmatched_billing, unmatched_projects
+    return attached, possible, reviews, unmatched_billing, unmatched_projects
 
 
 def bucket(end: date | None, as_of: date) -> str:
@@ -143,7 +146,9 @@ def run_radar(
     as_of: date,
 ) -> dict:
     current, superseded = collapse_resigns(billing)
-    attached, reviews, unmatched_b, unmatched_p = pair_projects(current, projects)
+    attached, possible, reviews, unmatched_b, unmatched_p = pair_projects(
+        current, projects
+    )
 
     records = []
     missing_end = []
@@ -158,21 +163,36 @@ def run_radar(
         project = None
         score = None
         why = None
+        match_kind = "unmatched"
+        possible_match = None
         if bi in attached:
             pi, score, why = attached[bi]
             project = projects[pi]
+            match_kind = "matched"
+        elif bi in possible:
+            pi, score, why = possible[bi]
+            match_kind = "review"
+            cand = projects[pi]
+            possible_match = {
+                "project_name": cand["brand_name"],
+                "score": score,
+                "why": why,
+                "scope": cand["current_scope"],
+                "last_delivery": cand["last_delivery"].isoformat()
+                if cand["last_delivery"]
+                else None,
+                "notes": cand["notes"],
+                "health": cand["health"],
+                "account_lead": cand["account_lead"],
+            }
 
         status = bucket(end, as_of)
         days = (end - as_of).days if end else None
 
-        display = (
-            project["brand_name"]
-            if project and score and score >= 88
-            else b["client_name"]
-        )
-        # Prefer the project (trading) name on the card — that is what
-        # the lead uses in Slack. Alternative: always show the billing
-        # legal name. Accurate, and they will not recognise half of them.
+        # Trading name only when the match is confirmed. Alternative:
+        # always show the project name at 90+. That is the contradiction
+        # — a possible match looking like the same client.
+        display = project["brand_name"] if project else b["client_name"]
 
         records.append(
             {
@@ -181,7 +201,8 @@ def run_radar(
                 "project_name": project["brand_name"] if project else None,
                 "match_score": score,
                 "match_why": why,
-                "match_kind": classify_score(score or 0) if score is not None else "unmatched",
+                "match_kind": match_kind,
+                "possible_match": possible_match,
                 "start": b["retainer_start"].isoformat() if b["retainer_start"] else None,
                 "end": end.isoformat() if end else None,
                 "end_inferred": inferred,

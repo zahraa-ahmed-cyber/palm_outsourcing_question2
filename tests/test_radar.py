@@ -45,9 +45,27 @@ def test_split_compound_name():
     assert "Northstar" not in why
 
 
-def test_extra_word_still_auto_matches():
+def test_extra_word_is_possible_not_confirmed():
     score, _ = name_score("Mira Skin", "Mira Skin Care")
     assert score == 90
+    from radar.names import classify_score
+
+    assert classify_score(90) == "review"
+    radar = _radar()
+    mira = next(r for r in radar["upcoming"] if r["billing_name"] == "Mira Skin")
+    assert mira["match_kind"] == "review"
+    assert mira["display_name"] == "Mira Skin"
+    assert mira["scope"] is None
+    assert mira["possible_match"]["project_name"] == "Mira Skin Care"
+    assert mira["possible_match"]["score"] == 90
+
+
+def test_confirmed_match_still_uses_trading_name():
+    radar = _radar()
+    acme = next(r for r in radar["upcoming"] if "Acme" in r["billing_name"])
+    assert acme["match_kind"] == "matched"
+    assert acme["display_name"] == "ACME Wellness"
+    assert acme["scope"]
 
 
 def test_unrelated_names_stay_unmatched():
